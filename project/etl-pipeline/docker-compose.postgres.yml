@@ -1,0 +1,22 @@
+# Use postgres/example user/password credentials
+
+services:
+
+  db:
+    image: postgres
+    # set shared memory limit when using docker compose
+    shm_size: 128mb
+    environment:
+      POSTGRES_PASSWORD: example
+    networks:
+      - etl_net
+
+  adminer:
+    image: adminer
+    ports:
+      - 8080:8080
+    networks:
+      - etl_net
+networks:
+  etl_net:
+    external: true 

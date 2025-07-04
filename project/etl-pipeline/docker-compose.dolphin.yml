@@ -1,0 +1,15 @@
+version: '3'
+
+services:
+  dolphinscheduler-standalone-server:
+    image: apache/dolphinscheduler-standalone-server:3.2.1
+    container_name: dolphinscheduler-standalone
+    ports:
+      - "12345:12345"   # UI port
+      - "25333:25333"   # API port
+    environment:
+      - TZ=Asia/Ho_Chi_Minh
+      - SPARK_HOME=/opt/spark
+    volumes:
+      - ./dolphinscheduler-data:/opt/dolphinscheduler/data
+      - ./resources:/dolphinscheduler/tthuy/resources

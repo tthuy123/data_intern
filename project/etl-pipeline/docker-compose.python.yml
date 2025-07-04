@@ -1,0 +1,15 @@
+services:
+  py-script:
+    image: python:3.11-slim
+    container_name: py-script
+    volumes:
+      - ./script:/app                    # Mount script Python vào /app
+      - /home/ttthuy/data_intern/data_generate:/data  # Mount CSV host vào /data
+    working_dir: /app                    # Điểm chạy mặc định là /app
+    command: ["sh", "-c", "pip install pymongo && python import.py"]
+    networks:
+      - etl_net
+
+networks:
+  etl_net:
+    external: true

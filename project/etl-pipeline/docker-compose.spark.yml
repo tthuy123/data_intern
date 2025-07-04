@@ -1,0 +1,20 @@
+version: "3.9"
+
+services:
+  spark:
+    image: bitnami/spark:3.3.2
+    container_name: spark
+    user: root
+    environment:
+      - SPARK_MODE=master
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./clean:/opt/bitnami/spark/data/clean
+      - ./spark-defaults.conf:/opt/bitnami/spark/conf/spark-defaults.conf
+    networks:
+      - etl_net
+
+networks:
+  etl_net:
+    external: true

@@ -1,0 +1,23 @@
+version: "3.9"
+
+services:
+  superset:
+    image: custom-superset
+    container_name: superset
+    ports:
+      - "8088:8088"
+    environment:
+      - SUPERSET_SECRET_KEY=tthuy
+    volumes:
+      - superset_data:/app/superset_home        
+      - ./superset.sh:/app/docker-init.sh      
+    entrypoint: ["/bin/bash", "/app/docker-init.sh"]
+    networks:
+      - etl_net
+
+networks:
+  etl_net:
+    external: true
+
+volumes:
+  superset_data:

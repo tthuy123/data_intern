@@ -1,0 +1,10 @@
+
+services: {}
+
+networks:
+  etl_net:
+
+volumes:
+    mongodb_data:
+    pg_data:
+    minio_data:
