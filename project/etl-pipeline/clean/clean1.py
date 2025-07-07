@@ -7,7 +7,6 @@ import re
 # Tạo SparkSession
 spark = SparkSession.builder.appName("Clean User Data").getOrCreate()
 
-# Danh sách tỉnh/thành phố Việt Nam hard-code
 VN_CITIES = {
     "Hà Nội", "Hồ Chí Minh", "Đà Nẵng", "Hải Phòng", "Cần Thơ",
     "An Giang", "Bà Rịa - Vũng Tàu", "Bắc Giang", "Bắc Kạn", "Bạc Liêu",
@@ -32,8 +31,8 @@ def clean_data(raw_json):
             raise ValueError("Not a dict")
     except:
         return json.dumps({
-            "id": "N/A", "name": "N/A", "email": "N/A", "phone": "N/A",
-            "gender": "N/A", "age": "N/A", "address": "N/A", "occupation": "N/A"
+            "id": "N/A", "name": "N/A", "email": "N/A", "phone": None,
+            "gender": "N/A", "age": -1, "address": "N/A", "occupation": "N/A"
         })
 
     data["_id"] = str(data.get("_id", "N/A"))
@@ -61,7 +60,7 @@ def clean_data(raw_json):
     # Age
     try:
         age = int(data.get("age", -1))
-        data["age"] = age if 0 < age <= 120 else "N/A"
+        data["age"] = age if 0 < age <= 120 else -1
     except:
         data["age"] = -1 # lỗi định dạng hoặc không có
 
@@ -81,7 +80,7 @@ def clean_data(raw_json):
 
 clean_udf = udf(clean_data, StringType())
 
-df = spark.read.option("header", "true").option("multiLine", True).option("escape", "\"").option("mode", "PERMISSIVE").csv("s3a://rawdata/data/user/2025_06_29_1751218226640_1.csv")
+df = spark.read.option("header", "true").option("multiLine", True).option("escape", "\"").option("mode", "PERMISSIVE").csv("s3a://rawdata/data/user/*.csv")
 
 df_cleaned = df.withColumn("cleaned_data", clean_udf(col("_airbyte_data")))
 
@@ -90,6 +89,8 @@ json_schema = schema_of_json(lit(sample_json))
 
 df_final = df_cleaned.withColumn("parsed", from_json("cleaned_data", json_schema)).select("parsed.*")
 df_final = df_final.withColumn("dt", current_date())
+
+df_final = df_final.dropDuplicates(["email"])
 
 output_path = "s3a://cleandata/user_cleaned/"
 print(f"Output path: {output_path}")
