@@ -2,7 +2,6 @@ from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, udf, lit, current_date, from_json, schema_of_json
 from pyspark.sql.types import StringType
 import json
-import re
 
 # Tạo SparkSession
 spark = SparkSession.builder.appName("Clean User Data").getOrCreate()
@@ -28,61 +27,74 @@ def clean_data(raw_json):
     try:
         data = json.loads(raw_json)
         if not isinstance(data, dict):
-            raise ValueError("Not a dict")
+            return None
     except:
-        return json.dumps({
-            "id": "N/A", "name": "N/A", "email": "N/A", "phone": None,
-            "gender": "N/A", "age": -1, "address": "N/A", "occupation": "N/A"
-        })
+        return None
 
-    data["_id"] = str(data.get("_id", "N/A"))
-    data["name"] = data.get("name", "N/A")
-
-    # Email
-    email = data.get("email", "N/A")
-    if email == "N/A" or not re.match(r"[^@]+@[^@]+\.[^@]+", email):
-        email = "N/A"
-    data["email"] = email
-
-    # Phone
-    data["phone"] = data.get("phone", None)
-    
-    # Gender
-    gender = data.get("gender", "N/A")
-    if gender.lower() == "boy":
-        gender = "Male"
-    elif gender.lower() == "girl":
-        gender = "Female"
-    elif gender not in {"Male", "Female", "Other"}:
-        gender = "N/A"
-    data["gender"] = gender
-
-    # Age
     try:
-        age = int(data.get("age", -1))
-        data["age"] = age if 0 < age <= 120 else -1
+        # ID & Name: thiếu thì gán "N/A"
+        _id = str(data.get("_id", None))
+        name = data.get("name", None)
+
+        # Email: thiếu => drop
+        email = data.get("email", None)
+
+        # Phone: thiếu thì None
+        phone = data.get("phone", None)
+
+        # Gender: nếu có nhưng không hợp lệ => drop, còn nếu thiếu => gán "N/A"
+        gender = data.get("gender", "N/A")
+        gender_l = gender.lower()
+        if gender_l == "boy":
+            gender = "Male"
+        elif gender_l == "girl":
+            gender = "Female"
+        elif gender_l not in {"male", "female", "other", "Unkown"}:
+            return None
+
+        # Age: nếu sai định dạng (không ép được int hoặc không hợp lệ) => drop, thiếu thì gán -1
+        if "age" in data:
+            try:
+                age = int(data["age"])
+                if not (0 < age <= 120):
+                    return None
+            except:
+                return None
+        else:
+            age = -1
+
+        # Address: nếu có nhưng không thuộc danh sách VN_CITIES thì drop, thiếu thì gán "Unkown"
+        address = data.get("address", "Unkown")
+        if address != "N/A" and address.strip() not in VN_CITIES:
+            return None
+
+        # Occupation: thiếu thì gán "N/A"
+        occupation = data.get("occupation", "Unkown")
+
+        clean_record = {
+            "_id": _id,
+            "name": name,
+            "email": email,
+            "phone": phone,
+            "gender": gender,
+            "age": age,
+            "address": address.strip(),
+            "occupation": occupation
+        }
+
+        return json.dumps(clean_record)
+
     except:
-        data["age"] = -1 # lỗi định dạng hoặc không có
-
-    # Address
-    address = data.get("address", "N/A")
-    if address.strip() in VN_CITIES:
-        data["address"] = address.strip()
-    elif address == "N/A":
-        data["address"] = "N/A"
-    else:
-        data["address"] = "Invalid"
-
-    # Occupation
-    data["occupation"] = data.get("occupation", "N/A")
-
-    return json.dumps(data)
+        return None
 
 clean_udf = udf(clean_data, StringType())
 
 df = spark.read.option("header", "true").option("multiLine", True).option("escape", "\"").option("mode", "PERMISSIVE").csv("s3a://rawdata/data/user/*.csv")
 
 df_cleaned = df.withColumn("cleaned_data", clean_udf(col("_airbyte_data")))
+
+# filter out rows where cleaned_data is None
+df_cleaned = df_cleaned.filter(col("cleaned_data").isNotNull())
 
 sample_json = df_cleaned.select("cleaned_data").first()["cleaned_data"]
 json_schema = schema_of_json(lit(sample_json))
