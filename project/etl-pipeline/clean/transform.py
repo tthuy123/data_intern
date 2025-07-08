@@ -15,7 +15,9 @@ spark = SparkSession.builder \
     .getOrCreate()
 
 today_str = datetime.today().strftime('%Y-%m-%d')
-df = spark.read.parquet("s3a://cleandata/user_cleaned/dt={today_str}/*.parquet")
+print(f"Processing data for date: {today_str}")
+path = f"s3a://cleandata/user_cleaned/dt={today_str}/*.parquet"
+df = spark.read.parquet(path)
 
 # Tạo bảng dim_user
 dim_user = df.select(
