@@ -2,7 +2,7 @@
 CREATE TABLE dim_user (
     user_id     INT PRIMARY KEY,
     name        VARCHAR(255),
-    email       VARCHAR(255)
+    email       VARCHAR(255) UNIQUE
 );
 
 -- Bảng nghề nghiệp
