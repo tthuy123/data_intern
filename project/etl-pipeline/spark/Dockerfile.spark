@@ -1,0 +1,13 @@
+FROM bitnami/spark:3.3.2
+
+USER root
+
+# Cài pip và FastAPI
+RUN apt update && apt install -y python3-pip
+RUN pip3 install fastapi uvicorn sqlalchemy psycopg2-binary
+
+# Copy API và job scripts
+COPY api.py /opt/bitnami/spark/api_server.py
+
+# Start Spark master + API song song bằng supervisord hoặc background
+CMD /opt/bitnami/spark/sbin/start-spark.sh & uvicorn api_server:app --host 0.0.0.0 --port 8000
