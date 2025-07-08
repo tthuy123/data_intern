@@ -18,82 +18,84 @@ def clean_data(raw_json):
     try:
         data = json.loads(raw_json)
         if not isinstance(data, dict):
-            raise ValueError("Not a dict")
+            return None
     except:
-        return json.dumps({"id": "N/A", "name": "N/A", "email": "N/A", "phone": "N/A",
-                           "gender": "N/A", "age": "N/A", "address": "N/A", "occupation": "N/A"})
+        return None
 
-    # ID
-    data["_id"] = str(data.get("_id", "N/A"))
-
-    # Name
-    data["name"] = data.get("name", "N/A")
-
-    # Email
-    email = data.get("email", "N/A")
-    if email == "N/A" or not re.match(r"[^@]+@[^@]+\.[^@]+", email):
-        email = "N/A"
-    data["email"] = email
-
-    # Phone
-    data["phone"] = data.get("phone", "N/A")
-
-    # Gender
-    gender = data.get("gender", "N/A")
-    if gender.lower() == "boy":
-        gender = "Male"
-    elif gender.lower() == "girl":
-        gender = "Female"
-    elif gender not in {"Male", "Female", "Other"}:
-        gender = "N/A"
-    data["gender"] = gender
-
-    # Age
     try:
-        age = int(data.get("age", -1))
-        if 0 < age <= 120:
-            data["age"] = age
+        # ID & Name: thiếu thì gán "N/A"
+        _id = str(data.get("_id", None))
+        name = data.get("name", None)
+
+        # Email: thiếu => drop
+        email = data.get("email", None)
+
+        # Phone: thiếu thì None
+        phone = data.get("phone", None)
+
+        # Gender: nếu có nhưng không hợp lệ => drop, còn nếu thiếu => gán "N/A"
+        gender = data.get("gender", "N/A")
+        gender_l = gender.lower()
+        if gender_l == "boy":
+            gender = "Male"
+        elif gender_l == "girl":
+            gender = "Female"
+        elif gender_l not in {"male", "female", "other", "Unkown"}:
+            return None
+
+        # Age: nếu sai định dạng (không ép được int hoặc không hợp lệ) => drop, thiếu thì gán -1
+        if "age" in data:
+            try:
+                age = int(data["age"])
+                if not (0 < age <= 120):
+                    return None
+            except:
+                return None
         else:
-            data["age"] = "N/A"
+            age = -1
+
+        # Address: nếu có nhưng không thuộc danh sách VN_CITIES thì drop, thiếu thì gán "Unkown"
+        vn_cities = load_vn_cities()
+        address = data.get("address", "Unkown")
+        if address != "N/A" and address.strip() not in vn_cities:
+            return None
+
+        # Occupation: thiếu thì gán "N/A"
+        occupation = data.get("occupation", "Unkown")
+
+        clean_record = {
+            "_id": _id,
+            "name": name,
+            "email": email,
+            "phone": phone,
+            "gender": gender,
+            "age": age,
+            "address": address.strip(),
+            "occupation": occupation
+        }
+
+        return json.dumps(clean_record)
+
     except:
-        data["age"] = "N/A"
+        return None
 
-    # Address
-    valid_provinces = load_vn_cities()
-    address = data.get("address", "N/A")
-    if address == "N/A":
-        data["address"] = "N/A"
-    elif address.strip() in valid_provinces:
-        data["address"] = address.strip()
-    else:
-        data["address"] = "Invalid"
-
-    # Occupation
-    data["occupation"] = data.get("occupation", "N/A")
-
-    return json.dumps(data)
 
 clean_udf = udf(clean_data, StringType())
 
-# Đọc từ MinIO (giả sử file ở dạng CSV)
-df = spark.read.option("header", "true").option("multiLine", True).option("escape", "\"").option("mode", "PERMISSIVE").csv("s3a://rawdata/data/user/2025_06_29_1751218226640_1.csv")
+df = spark.read.option("header", "true").option("multiLine", True).option("escape", "\"").option("mode", "PERMISSIVE").csv("s3a://rawdata/data/user/*.csv")
 
-# df = spark.read.option("header", "true").csv("s3a://rawdata/data/user/2025_06_29_1751218226640_1.csv")
-
-# Áp dụng hàm cleaning
-df.select("_airbyte_data").show(5, truncate=False)
-df.selectExpr("typeof(_airbyte_data)").distinct().show()
 df_cleaned = df.withColumn("cleaned_data", clean_udf(col("_airbyte_data")))
 
-# Có thể tách các trường ra nếu muốn:
+# filter out rows where cleaned_data is None
+df_cleaned = df_cleaned.filter(col("cleaned_data").isNotNull())
+
 sample_json = df_cleaned.select("cleaned_data").first()["cleaned_data"]
 json_schema = schema_of_json(lit(sample_json))
 
 df_final = df_cleaned.withColumn("parsed", from_json("cleaned_data", json_schema)).select("parsed.*")
+df_final = df_final.withColumn("dt", current_date())
 
-df_final = df_cleaned.withColumn("dt", current_date())
-df_final.select("cleaned_data").show(5, truncate=False)
-
+df_final = df_final.dropDuplicates(["email"])
 
 output_path = "s3a://cleandata/user_cleaned/"
 print(f"Output path: {output_path}")
