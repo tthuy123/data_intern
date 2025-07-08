@@ -33,14 +33,14 @@ def clean_data(raw_json):
         # Phone: thiếu thì None
         phone = data.get("phone", None)
 
-        # Gender: nếu có nhưng không hợp lệ => drop, còn nếu thiếu => gán "N/A"
+        # Gender: nếu có nhưng không hợp lệ => drop, còn nếu thiếu gán Unkown
         gender = data.get("gender", "N/A")
         gender_l = gender.lower()
         if gender_l == "boy":
             gender = "Male"
         elif gender_l == "girl":
             gender = "Female"
-        elif gender_l not in {"male", "female", "other", "Unkown"}:
+        elif gender_l not in {"male", "female", "other", "unknown"}:
             return None
 
         # Age: nếu sai định dạng (không ép được int hoặc không hợp lệ) => drop, thiếu thì gán -1
@@ -54,14 +54,14 @@ def clean_data(raw_json):
         else:
             age = -1
 
-        # Address: nếu có nhưng không thuộc danh sách VN_CITIES thì drop, thiếu thì gán "Unkown"
+        # Address: nếu có nhưng không thuộc danh sách VN_CITIES thì drop, thiếu thì gán "Unknown"
         vn_cities = load_vn_cities()
-        address = data.get("address", "Unkown")
-        if address != "N/A" and address.strip() not in vn_cities:
+        address = data.get("address", "Unknown")
+        if address != "Unknown" and address.strip() not in vn_cities:
             return None
 
         # Occupation: thiếu thì gán "N/A"
-        occupation = data.get("occupation", "Unkown")
+        occupation = data.get("occupation", "Unknown")
 
         clean_record = {
             "_id": _id,
