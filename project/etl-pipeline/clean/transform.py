@@ -1,8 +1,9 @@
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, when, lit, monotonically_increasing_id, create_map, coalesce
+from pyspark.sql.functions import col, when, lit, monotonically_increasing_id, create_map, coalesce, count, current_timestamp
 from pyspark.sql.types import IntegerType
 from itertools import chain
 import json
+from datetime import datetime
 
 # Tạo SparkSession
 spark = SparkSession.builder \
@@ -13,7 +14,8 @@ spark = SparkSession.builder \
     .config("spark.hadoop.fs.s3a.path.style.access", "true") \
     .getOrCreate()
 
-df = spark.read.parquet("s3a://cleandata/user_cleaned/dt=2025-07-07/*.parquet")
+today_str = datetime.today().strftime('%Y-%m-%d')
+df = spark.read.parquet("s3a://cleandata/user_cleaned/dt={today_str}/*.parquet")
 
 # Tạo bảng dim_user
 dim_user = df.select(
@@ -80,6 +82,47 @@ fct_user = df.alias("d") \
         col("d.gender")
     )
 
+
+
+age_insight = fct_user.join(dim_age_group, on="age_group_id", how="left") \
+    .groupBy("description") \
+    .agg(count("user_id").alias("user_count")) \
+    .withColumn("segment_type", lit("age")) \
+    .withColumnRenamed("description", "description") \
+    .select("segment_type", "description", "user_count")
+
+# 2. Insight theo vùng (region)
+region_insight = fct_user.join(dim_address, on="address_id", how="left") \
+    .groupBy("region") \
+    .agg(count("user_id").alias("user_count")) \
+    .withColumn("segment_type", lit("region")) \
+    .withColumnRenamed("region", "description") \
+    .select("segment_type", "description", "user_count")
+
+# 3. Insight theo nghề (occupation)
+occupation_insight = fct_user.join(dim_occupation, on="occupation_id", how="left") \
+    .groupBy("category") \
+    .agg(count("user_id").alias("user_count")) \
+    .withColumn("segment_type", lit("occupation_group")) \
+    .withColumnRenamed("category", "description") \
+    .select("segment_type", "description", "user_count")
+
+# 4. Insight theo giới tính (gender)
+gender_insight = fct_user \
+    .groupBy("gender") \
+    .agg(count("user_id").alias("user_count")) \
+    .withColumn("segment_type", lit("gender")) \
+    .withColumnRenamed("gender", "description") \
+    .select("segment_type", "description", "user_count")
+
+# Union tất cả lại
+user_segment_insight = age_insight.union(region_insight).union(occupation_insight).union(gender_insight)
+
+user_segment_insight = user_segment_insight \
+    .withColumn("id", monotonically_increasing_id()) \
+    .withColumn("updated_at", current_timestamp()) \
+    .select("id", "segment_type", "description", "user_count", "updated_at")
+# Ghi ra Parquet
 output_path = "s3a://insightdata"
 
 dim_user.write.mode("overwrite").parquet(f"{output_path}/dim_user")
@@ -87,5 +130,7 @@ dim_address.write.mode("overwrite").parquet(f"{output_path}/dim_address")
 dim_occupation.write.mode("overwrite").parquet(f"{output_path}/dim_occupation")
 dim_age_group.write.mode("overwrite").parquet(f"{output_path}/dim_age_group")
 fct_user.write.mode("overwrite").parquet(f"{output_path}/fct_user")
+user_segment_insight.write.mode("overwrite").parquet(f"{output_path}/user_segment_insight")
+print("Transformations completed and data written to MinIO.")
 
 spark.stop()
