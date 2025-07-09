@@ -26,11 +26,15 @@ def clean_data(raw_json):
         # Danh sách tỉnh/thành Việt Nam hợp lệ
         vn_cities = load_vn_cities()
 
-        # _id: thiếu thì gán ""
-        _id = str(data.get("_id", "") or "")
+        # _id: bắt buộc phải có, nếu thiếu thì drop
+        _id = data.get("_id", None)
+        if not _id:
+            return None
 
-        # name: thiếu thì gán ""
-        name = data.get("name", "") or ""
+        # name: bắt buộc phải có, nếu thiếu thì drop
+        name = data.get("name", "")
+        if not name:
+            return None
 
         # email: bắt buộc phải có
         email = data.get("email", None)
@@ -48,7 +52,7 @@ def clean_data(raw_json):
                 gender = "Male"
             elif gender_l == "girl":
                 gender = "Female"
-            elif gender_l in {"male", "female", "other", "unknown"}:
+            elif gender_l in {"male", "female", "other"}:
                 gender = gender_l.capitalize()
             else:
                 return None
