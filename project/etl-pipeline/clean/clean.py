@@ -23,46 +23,63 @@ def clean_data(raw_json):
         return None
 
     try:
-        # ID & Name: thiếu thì gán "N/A"
-        _id = str(data.get("_id", None))
-        name = data.get("name", None)
+        # Danh sách tỉnh/thành Việt Nam hợp lệ
+        vn_cities = load_vn_cities()
 
-        # Email: thiếu => drop
+        # _id: thiếu thì gán ""
+        _id = str(data.get("_id", "") or "")
+
+        # name: thiếu thì gán ""
+        name = data.get("name", "") or ""
+
+        # email: bắt buộc phải có
         email = data.get("email", None)
-
-        # Phone: thiếu thì None
-        phone = data.get("phone", None)
-
-        # Gender: nếu có nhưng không hợp lệ => drop, còn nếu thiếu gán Unkown
-        gender = data.get("gender", "N/A")
-        gender_l = gender.lower()
-        if gender_l == "boy":
-            gender = "Male"
-        elif gender_l == "girl":
-            gender = "Female"
-        elif gender_l not in {"male", "female", "other", "unknown"}:
+        if not email:
             return None
 
-        # Age: nếu sai định dạng (không ép được int hoặc không hợp lệ) => drop, thiếu thì gán -1
-        if "age" in data:
+        # phone: thiếu thì None
+        phone = data.get("phone", None)
+
+        # gender: thiếu thì None, nếu có mà sai → drop
+        gender = data.get("gender", None)
+        if gender:
+            gender_l = gender.lower()
+            if gender_l == "boy":
+                gender = "Male"
+            elif gender_l == "girl":
+                gender = "Female"
+            elif gender_l in {"male", "female", "other", "unknown"}:
+                gender = gender_l.capitalize()
+            else:
+                return None
+        else:
+            gender = None
+
+        # age: nếu có mà sai định dạng hoặc out-of-range → drop, thiếu thì None
+        age = data.get("age", None)
+        if age is not None:
             try:
-                age = int(data["age"])
+                age = int(age)
                 if not (0 < age <= 120):
                     return None
             except:
                 return None
         else:
-            age = -1
+            age = None
 
-        # Address: nếu có nhưng không thuộc danh sách VN_CITIES thì drop, thiếu thì gán "Unknown"
-        vn_cities = load_vn_cities()
-        address = data.get("address", "Unknown")
-        if address != "Unknown" and address.strip() not in vn_cities:
-            return None
+        # address: thiếu thì None, nếu có mà không thuộc danh sách tỉnh thì drop
+        address = data.get("address", None)
+        if address:
+            address = address.strip()
+            if address not in vn_cities:
+                return None
+        else:
+            address = None
 
-        # Occupation: thiếu thì gán "N/A"
-        occupation = data.get("occupation", "Unknown")
+        # occupation: thiếu thì gán ""
+        occupation = data.get("occupation", "") or ""
 
+        # Trả về bản ghi đã làm sạch (dưới dạng JSON string)
         clean_record = {
             "_id": _id,
             "name": name,
@@ -70,7 +87,7 @@ def clean_data(raw_json):
             "phone": phone,
             "gender": gender,
             "age": age,
-            "address": address.strip(),
+            "address": address,
             "occupation": occupation
         }
 
@@ -78,6 +95,7 @@ def clean_data(raw_json):
 
     except:
         return None
+
 
 
 clean_udf = udf(clean_data, StringType())
